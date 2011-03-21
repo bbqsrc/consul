@@ -63,9 +63,9 @@ public class Statusbar : GLib.Object
 		for (int i = 0; i < 3; ++i) {
 			win.mvaddstr(0, msgpos[i], message[i]);
 		}
-		win.mvaddch(0, msgmax+1, '|');
+		/*win.mvaddch(0, msgmax+1, '|');
 		win.mvaddch(0, msgmax*2+2, '|');
-		win.mvaddch(0, msgmax*3+3, '|');
+		win.mvaddch(0, msgmax*3+3, '|');*/
 		win.refresh();
 	}
 }
@@ -183,11 +183,21 @@ public class Menu : GLib.Object
 				(FILE_ATTRIBUTE_STANDARD_NAME + "," + FILE_ATTRIBUTE_STANDARD_TYPE, 0);
 
         	FileInfo file_info;
+			FileInfo[] files = {};
 			items = {};
         	while ((file_info = enumerator.next_file ()) != null) {
-        		if (file_info.get_name()[0] != '.')
-					items += file_info;
-   	    	}
+        		if (file_info.get_name()[0] != '.') {
+					if (file_info.get_file_type() == FileType.DIRECTORY)
+						items += file_info;
+					else
+						files += file_info;
+				}
+			}
+			foreach (FileInfo i in files) {
+				items += i;
+			}
+			selected = 0;
+			offset = 0;
 
     	} catch (Error e) {
         	stderr.printf ("Error: %s\n", e.message);
@@ -205,7 +215,7 @@ public class Menu : GLib.Object
 	public string get_item_string(int x)
 	{
 		if (items[x].get_file_type() == FileType.DIRECTORY)
-			return items[x].get_name() + "/";
+			return items[x].get_name() + " >";
 		else
 			return items[x].get_name();
 	}
