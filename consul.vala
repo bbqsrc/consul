@@ -76,7 +76,8 @@ public class Menu : GLib.Object
 
 	private Window scrlwin;
 	private const unichar BUD = '|';
-
+	private File directory;
+	
 	public Window win;// {get; private set;}
 	private string[] items;
 	public int selected { get; private set; default = 0; }
@@ -84,7 +85,8 @@ public class Menu : GLib.Object
 
 	public Menu(int y, int x, 
 				int yoff, int xoff, 
-				string[] items, bool scrl=false) 
+				string dir, bool scrl=false)
+				//string[] items, bool scrl=false) 
 	{
 		if (scrl) {
 			this.win = new Window(y, x-1, yoff, xoff);
@@ -96,15 +98,16 @@ public class Menu : GLib.Object
 		status.set_color(COLOR_PAIR(2) | Attribute.BOLD);
 
 		this.items = {};
-		for (int i = 0; i < items.length; ++i) {
+		/*for (int i = 0; i < items.length; ++i) {
 			if(items[i][0] != '.')
 				this.items += items[i]; 
-		}
+		}*/
+		set_directory(dir);
 
 		status.add_message("Consul Test :)", 0);
 		status.add_message("... something ...", 1);
 		status.add_message_r(@"$(selected+offset)/$(length())", 2);
-		generate();
+		//generate();
 	}
 	
 	public string? get_item(int x)
@@ -141,30 +144,68 @@ public class Menu : GLib.Object
 		generate(offset);
 	}
 
-	public void keypress(int key)
+	public string? keypress(int key)
 	{
 		switch(key) {
-			case Key.UP:
 			case 'p':
+			case Key.UP:
 				scroll_up();
 				break;
-			case Key.DOWN:
 			case 'n':
+			case Key.DOWN:
 				scroll_down();
+				break;
+			case 'e':
+			case Key.ENTER:
+				if(get_item(offset + selected) == "..") {
+					set_directory(directory.get_path() + "/..");
+					generate();
+				}
 				break;
 			default:
 				break;
 		}
-		
+		return null;
 	}
 	
+	public void set_directory(string d)
+	{
+		try {
+        	directory = File.new_for_commandline_arg(d);
+        	var enumerator = directory.enumerate_children 
+				(FILE_ATTRIBUTE_STANDARD_NAME + "," + FILE_ATTRIBUTE_STANDARD_TYPE, 0);
+
+        	FileInfo file_info;
+			//string[] files = {};
+			items = {};
+			items += "..";
+        	while ((file_info = enumerator.next_file ()) != null) {
+            	if (file_info.get_name()[0] != '.') {
+					if (file_info.get_file_type() == FileType.DIRECTORY)
+						items += file_info.get_name() + "/";
+					else
+				 		items += file_info.get_name();
+				}
+   	    	}
+		/*this.items = {};
+		for (int i = 0; i < items.length; ++i) {
+			if(items[i][0] != '.')
+				this.items += items[i]; 
+		}*/
+
+    	} catch (Error e) {
+        	stderr.printf ("Error: %s\n", e.message);
+    	}
+	}
+
 	public void generate(int offset=0, int x=0) 
 	{
 		win.clear();
 		for (int c = 0; c <= win.getmaxy()-1; ++c) {
 			if (c == selected)
 				win.attron(Attribute.REVERSE);
-			win.mvaddstr(c, x, items[c + offset]);
+			if (c + offset <= length()) 
+				win.mvaddstr(c, x, items[c + offset]);
 			win.attroff(Attribute.REVERSE);
 			win.noutrefresh();
 		}
@@ -176,7 +217,8 @@ public class Menu : GLib.Object
 	
 			scrlwin.attrset(COLOR_PAIR(3));
 			if (length() > scrlwin.getmaxy()) {
-				int o = (((selected+offset)*100 / length()) * 100 / (10000 / (scrlwin.getmaxy()-1)));
+				int o = ((selected+offset)*100 / length()) * 100;
+				o /= 10000 / (scrlwin.getmaxy() - 1);
 				scrlwin.mvaddch(o, 0, BUD);
 			}
 			status.add_message_r(@"$(selected+offset)/$(length())", 2);
@@ -187,7 +229,7 @@ public class Menu : GLib.Object
 	}
 }
 
-void curses_init(string[] files) 
+void curses_init() 
 {
     initscr();
     noecho();
@@ -197,21 +239,11 @@ void curses_init(string[] files)
 	init_pair(3, Color.WHITE, Color.RED);
 	curs_set(0);
 
-	var list = new Menu(LINES-1, COLS, 0, 0, files, true);
-    list.win.bkgdset (COLOR_PAIR (1) | Attribute.BOLD);  // set background
-	list.win.scrollok(true);
-	list.generate();
-	
-	for (;;) {
-		int c = list.win.getch();
-		if(c == 'q')
-			break;
-		list.keypress(c);
-	}
 }
 
 int main (string[] args) {
     try {
+		/*
         var directory = File.new_for_path (".");
 
         if (args.length > 1) {
@@ -224,10 +256,31 @@ int main (string[] args) {
 		string[] files = {};
         while ((file_info = enumerator.next_file ()) != null) {
              files += file_info.get_name();
-        }
-		curses_init(files);	
-		endwin();
-
+        }*/
+		curses_init();	
+		var dir = ".";
+		if (args.length > 1) {
+			dir = args[1];
+		}
+		var list = new Menu(LINES-1, COLS, 0, 0, dir, true);
+    	list.win.bkgdset (COLOR_PAIR (1) | Attribute.BOLD);  // set background
+		list.win.scrollok(true);
+		list.win.keypad(true);
+		list.generate();
+	
+		for (;;) {
+			int c = list.win.getch();
+			if(c == 'q') {
+				endwin();
+				break;
+			}
+			string x = list.keypress(c);
+			if (x != null) {
+				endwin();
+				stdout.printf("Output: %s\n", x);
+				break;
+			}
+		}
     } catch (Error e) {
         stderr.printf ("Error: %s\n", e.message);
         return 1;
