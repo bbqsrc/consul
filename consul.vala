@@ -79,7 +79,8 @@ public class Menu : GLib.Object
 	private File directory;
 	
 	public Window win;// {get; private set;}
-	private string[] items;
+	//private string[] items;
+	private FileInfo[] items;
 	public int selected { get; private set; default = 0; }
 	public int offset { get; private set; default = 0; }
 
@@ -110,7 +111,7 @@ public class Menu : GLib.Object
 		//generate();
 	}
 	
-	public string? get_item(int x)
+	public FileInfo? get_item(int x)
 	{
 		if (x < items.length) 
 			return items[x];
@@ -157,10 +158,16 @@ public class Menu : GLib.Object
 				break;
 			case 'e':
 			case Key.ENTER:
-				if(get_item(offset + selected) == "..") {
+				/*if(get_item_string(offset + selected) == "..") {
 					set_directory(directory.get_path() + "/..");
 					generate();
-				}
+				}*/
+				do_selected();
+				generate();
+				break;
+			case 'u':
+				set_directory(directory.get_path() + "/..");
+				generate();
 				break;
 			default:
 				break;
@@ -176,57 +183,75 @@ public class Menu : GLib.Object
 				(FILE_ATTRIBUTE_STANDARD_NAME + "," + FILE_ATTRIBUTE_STANDARD_TYPE, 0);
 
         	FileInfo file_info;
-			//string[] files = {};
 			items = {};
-			items += "..";
         	while ((file_info = enumerator.next_file ()) != null) {
-            	if (file_info.get_name()[0] != '.') {
-					if (file_info.get_file_type() == FileType.DIRECTORY)
-						items += file_info.get_name() + "/";
-					else
-				 		items += file_info.get_name();
-				}
+        		if (file_info.get_name()[0] != '.')
+					items += file_info;
    	    	}
-		/*this.items = {};
-		for (int i = 0; i < items.length; ++i) {
-			if(items[i][0] != '.')
-				this.items += items[i]; 
-		}*/
 
     	} catch (Error e) {
         	stderr.printf ("Error: %s\n", e.message);
     	}
 	}
 
+	public void do_selected() 
+	{
+		FileInfo f = items[offset+selected];
+		if (f.get_file_type() == FileType.DIRECTORY)
+			set_directory(directory.get_path() + "/" + f.get_name());
+		//stub
+	}
+
+	public string get_item_string(int x)
+	{
+		if (items[x].get_file_type() == FileType.DIRECTORY)
+			return items[x].get_name() + "/";
+		else
+			return items[x].get_name();
+	}
+
 	public void generate(int offset=0, int x=0) 
 	{
+		generate_list(offset, x);
+		if (scrlwin != null)
+			generate_scrollbar(offset, x);
+		doupdate();
+	}
+	
+	private void generate_list(int offset=0, int x=0)
+	{
 		win.clear();
-		for (int c = 0; c <= win.getmaxy()-1; ++c) {
+		for (int c = 0; c <= length(); ++c) {//win.getmaxy()-1; ++c) {
 			if (c == selected)
 				win.attron(Attribute.REVERSE);
-			if (c + offset <= length()) 
-				win.mvaddstr(c, x, items[c + offset]);
+			if (c + offset <= length()) {
+				string item = get_item_string(c + offset);
+				if (item != null)
+					win.mvaddstr(c, x, item);
+			}
 			win.attroff(Attribute.REVERSE);
 			win.noutrefresh();
 		}
-		if (scrlwin != null) {
-			scrlwin.bkgdset(COLOR_PAIR(2)); //TODO color pair as a variable
-			for(int i = 0; i < win.getmaxy(); i++){
-				scrlwin.mvaddch(i, 0, ' ');
-			}
-	
-			scrlwin.attrset(COLOR_PAIR(3));
-			if (length() > scrlwin.getmaxy()) {
-				int o = ((selected+offset)*100 / length()) * 100;
-				o /= 10000 / (scrlwin.getmaxy() - 1);
-				scrlwin.mvaddch(o, 0, BUD);
-			}
-			status.add_message_r(@"$(selected+offset)/$(length())", 2);
-			status.show();
-			scrlwin.noutrefresh();
-		}
-		doupdate();
 	}
+
+	private void generate_scrollbar(int offset=0, int x=0)
+	{
+		scrlwin.bkgdset(COLOR_PAIR(2)); //TODO color pair as a variable
+		for(int i = 0; i < win.getmaxy(); i++){
+			scrlwin.mvaddch(i, 0, ' ');
+		}
+
+		scrlwin.attrset(COLOR_PAIR(3));
+		if (length() > scrlwin.getmaxy()) {
+			int o = ((selected+offset)*100 / length()) * 100;
+			o /= 10000 / (scrlwin.getmaxy() - 1);
+			scrlwin.mvaddch(o, 0, BUD);
+		}
+		status.add_message_r(@"$(selected+offset)/$(length())", 2);
+		status.show();
+		scrlwin.noutrefresh();
+	}
+
 }
 
 void curses_init() 
@@ -241,22 +266,8 @@ void curses_init()
 
 }
 
-int main (string[] args) {
-    try {
-		/*
-        var directory = File.new_for_path (".");
-
-        if (args.length > 1) {
-            directory = File.new_for_commandline_arg (args[1]);
-        }
-
-        var enumerator = directory.enumerate_children (FILE_ATTRIBUTE_STANDARD_NAME, 0);
-
-        FileInfo file_info;
-		string[] files = {};
-        while ((file_info = enumerator.next_file ()) != null) {
-             files += file_info.get_name();
-        }*/
+int main (string[] args)
+{
 		curses_init();	
 		var dir = ".";
 		if (args.length > 1) {
@@ -281,10 +292,6 @@ int main (string[] args) {
 				break;
 			}
 		}
-    } catch (Error e) {
-        stderr.printf ("Error: %s\n", e.message);
-        return 1;
-    }
 
     return 0;
 }
