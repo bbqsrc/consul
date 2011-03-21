@@ -81,10 +81,15 @@ public class Menu : GLib.Object
 	public int selected { get; private set; default = 0; }
 	public int offset { get; private set; default = 0; }
 
+	public KeyFile config;
+
 	public Menu(int y, int x, 
 				int yoff, int xoff, 
 				string dir, bool scrl=false)
 	{
+		this.config = new KeyFile();
+		get_config();
+		
 		if (scrl) {
 			this.win = new Window(y, x-1, yoff, xoff);
 			this.scrlwin = new Window(y, 1, yoff, x-1);
@@ -93,7 +98,8 @@ public class Menu : GLib.Object
 		}
 		status = new Statusbar(1, x, y, 0);
 		status.set_color(COLOR_PAIR(2) | Attribute.BOLD);
-
+		
+			
 		this.items = {};
 		set_directory(dir);
 
@@ -174,15 +180,15 @@ public class Menu : GLib.Object
 				++depth;
 			status.add_message(@"DEBUG: Depth $depth", 1);
 
-        	directory = File.new_for_commandline_arg(d);
-        	var enumerator = directory.enumerate_children 
+		directory = File.new_for_commandline_arg(d);
+		var enumerator = directory.enumerate_children 
 				(FILE_ATTRIBUTE_STANDARD_NAME + "," + FILE_ATTRIBUTE_STANDARD_TYPE, 0);
 
-        	FileInfo file_info;
+		FileInfo file_info;
 			FileInfo[] files = {};
 			FileInfo[] pitems = {};
-        	while ((file_info = enumerator.next_file ()) != null) {
-        		if (file_info.get_name()[0] != '.') {
+		while ((file_info = enumerator.next_file ()) != null) {
+			if (file_info.get_name()[0] != '.') {
 					if (file_info.get_file_type() == FileType.DIRECTORY)
 						pitems += file_info;
 					else
@@ -197,9 +203,10 @@ public class Menu : GLib.Object
 			offset = 0;
 
     	} catch (Error e) {
-        	stderr.printf ("Error: %s\n", e.message);
+		stderr.printf ("Error: %s\n", e.message);
     	}
 	}
+
 
 	public void do_selected() 
 	{
@@ -219,9 +226,6 @@ public class Menu : GLib.Object
 
 	public void generate(int offset=0, int x=0) 
 	{
-		//if(depth < 1)
-		//	generate_buttonlist(offset, x);
-		//else 
 		generate_list(offset, x);
 		if (scrlwin != null)
 			generate_scrollbar(offset, x);
@@ -229,30 +233,10 @@ public class Menu : GLib.Object
 		doupdate();
 	}
 
-/*
-	private void generate_buttonlist(int offset=0, int x=0)
-	{
-		win.clear();
-		for (int c = 0; c <= length(); ++c) {
-			int cur = c * 4;
-			if (c == selected)
-				win.attron(Attribute.REVERSE);
-			if (c + offset <= length()) {
-				string item = get_item_string(c + offset)[0:-2];
-				if (item != null) {
-					win.mvaddstr(cur+1, x+1, @"$item (0 roms)");
-					//win.mvaddstr(cur+2, x+1, "0 roms.");
-				}
-			}
-			win.attroff(Attribute.REVERSE);
-			win.noutrefresh();
-		}
-	}
-*/	
 	private void generate_list(int offset=0, int x=0)
 	{
 		win.clear();
-		for (int c = 0; c <= length(); ++c) {//win.getmaxy()-1; ++c) {
+		for (int c = 0; c <= length(); ++c) {
 			if (c == selected)
 				win.attron(Attribute.REVERSE);
 			if (c + offset <= length()) {
@@ -284,8 +268,55 @@ public class Menu : GLib.Object
 		scrlwin.noutrefresh();
 	}
 
+	private void get_config()
+	{
+		config = new KeyFile();
+		var dir = File.new_for_path(Environment.get_home_dir() + "/.consul");
+		try {
+			if (!dir.query_exists())
+				dir.make_directory();
+		} catch (Error e) {
+			error(@"Error making .consul: $(e.message)");
+		}
+
+		try {
+			config.load_from_file(dir.get_path() + "/consul.cfg", KeyFileFlags.NONE);
+		} catch (KeyFileError err) {
+			error(@"KeyFileError: $(err.message)");
+		} catch (FileError err) {
+			//config.set_string("Consul", "", "");
+			config.set_string("Filetypes", "smc", "zsnes");
+			config.set_string("Filetypes", "gen", "gens");
+			var str = config.to_data(null);
+			try {
+				FileUtils.set_contents (dir.get_path() + "/consul.cfg", str, str.length);
+			} catch (FileError err) {
+				error(@"FileError: $(err.message)");
+			}
+		}
+	}
+
 }
 
+void error(string msg)
+{
+	refresh();
+	def_prog_mode();
+	endwin();
+
+	stdout.printf("----------------------\n");
+	stdout.printf("| An error occurred: |\n");
+	stdout.printf("----------------------\n");
+	stdout.flush();
+	stderr.printf("%s\n\n", msg);
+	stderr.flush();
+	stdout.printf("Press ENTER to continue...\n");
+	stdout.flush();
+	getch();
+
+	reset_prog_mode();
+	refresh();
+}
 void curses_init() 
 {
     initscr();
@@ -294,6 +325,8 @@ void curses_init()
     init_pair(1, Color.WHITE, Color.BLACK);
 	init_pair(2, Color.WHITE, Color.BLUE);
 	init_pair(3, Color.WHITE, Color.RED);
+	init_pair(4, Color.RED, Color.BLACK);
+	init_pair(5, Color.BLACK, Color.WHITE);
 	curs_set(0);
 
 }
@@ -306,10 +339,11 @@ int main (string[] args)
 			dir = args[1];
 		}
 		var list = new Menu(LINES-1, COLS, 0, 0, dir, true);
-    	list.win.bkgdset (COLOR_PAIR (1) | Attribute.BOLD);  // set background
+    	list.win.bkgdset (COLOR_PAIR(1));  // set background
 		list.win.scrollok(true);
 		list.win.keypad(true);
 		list.generate();
+
 	
 		for (;;) {
 			int c = list.win.getch();
@@ -317,12 +351,7 @@ int main (string[] args)
 				endwin();
 				break;
 			}
-			string x = list.keypress(c);
-			if (x != null) {
-				endwin();
-				stdout.printf("Output: %s\n", x);
-				break;
-			}
+			list.keypress(c);
 		}
 
     return 0;
