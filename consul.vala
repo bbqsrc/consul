@@ -63,9 +63,6 @@ public class Statusbar : GLib.Object
 		for (int i = 0; i < 3; ++i) {
 			win.mvaddstr(0, msgpos[i], message[i]);
 		}
-		/*win.mvaddch(0, msgmax+1, '|');
-		win.mvaddch(0, msgmax*2+2, '|');
-		win.mvaddch(0, msgmax*3+3, '|');*/
 		win.refresh();
 	}
 }
@@ -78,16 +75,15 @@ public class Menu : GLib.Object
 	private const unichar BUD = '|';
 	private File directory;
 	
-	public Window win;// {get; private set;}
-	//private string[] items;
-	private FileInfo[] items;
+	public Window win;
+	private int depth = -1;
+	protected FileInfo[] items;
 	public int selected { get; private set; default = 0; }
 	public int offset { get; private set; default = 0; }
 
 	public Menu(int y, int x, 
 				int yoff, int xoff, 
 				string dir, bool scrl=false)
-				//string[] items, bool scrl=false) 
 	{
 		if (scrl) {
 			this.win = new Window(y, x-1, yoff, xoff);
@@ -99,16 +95,12 @@ public class Menu : GLib.Object
 		status.set_color(COLOR_PAIR(2) | Attribute.BOLD);
 
 		this.items = {};
-		/*for (int i = 0; i < items.length; ++i) {
-			if(items[i][0] != '.')
-				this.items += items[i]; 
-		}*/
 		set_directory(dir);
 
-		status.add_message("Consul Test :)", 0);
-		status.add_message("... something ...", 1);
+		status.add_message("Consul Alpha", 0);
+		status.add_message(@"DEBUG: Depth $depth", 1);
 		status.add_message_r(@"$(selected+offset)/$(length())", 2);
-		//generate();
+		generate();
 	}
 	
 	public FileInfo? get_item(int x)
@@ -158,10 +150,6 @@ public class Menu : GLib.Object
 				break;
 			case 'e':
 			case Key.ENTER:
-				/*if(get_item_string(offset + selected) == "..") {
-					set_directory(directory.get_path() + "/..");
-					generate();
-				}*/
 				do_selected();
 				generate();
 				break;
@@ -178,24 +166,33 @@ public class Menu : GLib.Object
 	public void set_directory(string d)
 	{
 		try {
+			if ("/.." in d)
+				if (depth > 0)
+					--depth;
+				else return; // stop going up
+			else
+				++depth;
+			status.add_message(@"DEBUG: Depth $depth", 1);
+
         	directory = File.new_for_commandline_arg(d);
         	var enumerator = directory.enumerate_children 
 				(FILE_ATTRIBUTE_STANDARD_NAME + "," + FILE_ATTRIBUTE_STANDARD_TYPE, 0);
 
         	FileInfo file_info;
 			FileInfo[] files = {};
-			items = {};
+			FileInfo[] pitems = {};
         	while ((file_info = enumerator.next_file ()) != null) {
         		if (file_info.get_name()[0] != '.') {
 					if (file_info.get_file_type() == FileType.DIRECTORY)
-						items += file_info;
+						pitems += file_info;
 					else
 						files += file_info;
 				}
 			}
 			foreach (FileInfo i in files) {
-				items += i;
+				pitems += i;
 			}
+			items = pitems;
 			selected = 0;
 			offset = 0;
 
@@ -222,12 +219,36 @@ public class Menu : GLib.Object
 
 	public void generate(int offset=0, int x=0) 
 	{
+		//if(depth < 1)
+		//	generate_buttonlist(offset, x);
+		//else 
 		generate_list(offset, x);
 		if (scrlwin != null)
 			generate_scrollbar(offset, x);
+		status.show();
 		doupdate();
 	}
-	
+
+/*
+	private void generate_buttonlist(int offset=0, int x=0)
+	{
+		win.clear();
+		for (int c = 0; c <= length(); ++c) {
+			int cur = c * 4;
+			if (c == selected)
+				win.attron(Attribute.REVERSE);
+			if (c + offset <= length()) {
+				string item = get_item_string(c + offset)[0:-2];
+				if (item != null) {
+					win.mvaddstr(cur+1, x+1, @"$item (0 roms)");
+					//win.mvaddstr(cur+2, x+1, "0 roms.");
+				}
+			}
+			win.attroff(Attribute.REVERSE);
+			win.noutrefresh();
+		}
+	}
+*/	
 	private void generate_list(int offset=0, int x=0)
 	{
 		win.clear();
@@ -252,7 +273,8 @@ public class Menu : GLib.Object
 		}
 
 		scrlwin.attrset(COLOR_PAIR(3));
-		if (length() > scrlwin.getmaxy()) {
+
+		if (length() > 0) {
 			int o = ((selected+offset)*100 / length()) * 100;
 			o /= 10000 / (scrlwin.getmaxy() - 1);
 			scrlwin.mvaddch(o, 0, BUD);
