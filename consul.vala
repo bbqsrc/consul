@@ -149,22 +149,40 @@ public class Menu : GLib.Object
 		generate(offset);
 	}
 
-	public void info_window()
+	public void info_window(string? msg=null)
 	{
-		infobox.clear();
-		//infobox.addstr("Herpy derpy!");
+		//generate();
 		string f = items.get(offset+selected);
 		var rom = get_rom(directory.get_path() + "/" + f);
-		infobox.addstr(get_rom_data(rom));
+		if(rom == null)
+			return;
+		infobox.clear();
+		if(msg == null)
+			infobox.addstr(get_rom_data(rom));
+		else
+			infobox.addstr(msg);
 		infobox.clrtoeol();
 		infobox.noutrefresh();
 		doupdate();
-		//infobox.getch();
+	}
+
+	public void usage()
+	{
+		string msg = "Usage:\n";
+		msg += "(h) This usage window\n";
+		msg += "(i) Information of rom\n";
+		msg += "(up/down/left/right) Move about\n";
+		msg += "(q) Quit\n";
+		info_window(msg);
 	}
 
 	public string? keypress(int key)
 	{
 		switch(key) {
+			case '?':
+			case 'h':
+				usage();
+				break;
 			case 'i':
 				info_window();
 				break;
@@ -180,7 +198,6 @@ public class Menu : GLib.Object
 			case Key.RIGHT:
 			case Key.ENTER:
 				do_selected();
-				generate();
 				break;
 			case Key.LEFT:
 			case 'u':
@@ -241,7 +258,7 @@ public class Menu : GLib.Object
 	private bool is_directory(string d)
 	{
 		try {
-			var file = File.new_for_path(directory.get_path() + "/" + d);
+			var file = File.new_for_path(d);
 			var f = file.query_info("*", FileQueryInfoFlags.NONE);
 			if (f.get_file_type() == FileType.DIRECTORY)
 				return true;
@@ -254,10 +271,34 @@ public class Menu : GLib.Object
 
 	public void do_selected() 
 	{
-		var f = items.get(selected + offset);
-		if(is_directory(f))
-			set_directory(directory.get_path() + "/" + f);
-		//stub
+		var f = directory.get_path() + "/" + items.get(selected + offset);
+		if(is_directory(f)) {
+			set_directory(f);
+			generate();
+		}
+		else {
+			var rom = get_rom(f);
+			string app = get_rom_app(rom) + " ";
+			
+			if(app == null) {
+				info_window("Not a supported rom!\n");
+				return;
+			}
+		
+			refresh();
+			def_prog_mode();
+			endwin();
+
+			try { 
+				Process.spawn_command_line_sync(@"$app '$f'");
+			}
+			catch(Error e) {
+				//error(e.message);
+				info_window(e.message);	
+			}
+			reset_prog_mode();
+			generate();
+		}
 	}
 
 	public void generate(int offset=0, int x=0) 
@@ -277,7 +318,7 @@ public class Menu : GLib.Object
 				win.attron(Attribute.REVERSE);
 			if (c + offset <= length()) {
 				string item = items.get(c + offset);
-				if(is_directory(item))
+				if(is_directory(directory.get_path() + "/" + item))
 					item += " >";
 				if (item != null)
 					win.mvaddstr(c, x, item);

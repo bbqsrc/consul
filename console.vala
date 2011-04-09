@@ -1,37 +1,16 @@
-/*
-int main(string[] args)
+RomData? get_rom(string r)
 {
-	if (args.length > 1) {
-		var file = File.new_for_path(args[1]);
-		var rom = new RomData(file, 0x200);
-		switch(rom.console) {
-			case Console.UNKNOWN:
-				stdout.printf("Unknown console.\n");
-				break;
-			case Console.SNES:
-				Snes.check(rom);
-				break;
-			case Console.GENESIS:
-				Genesis.check(rom);
-				break;
-			case Console.GBA:
-				Gba.check(rom);
-				break;
-		}
-		return 0;
+	try {
+		var file = File.new_for_path(r);
+		var f = file.query_info("*", FileQueryInfoFlags.NONE);
+		if (f.get_file_type() == FileType.DIRECTORY)
+			return null;
+		return new RomData(file, 0x200);
 	}
-	else {
-		stdout.printf("Usage: app some_rom\n");
-		return 0;
+	catch(Error e) {
+		return null;
 	}
-}
-*/
-
-RomData get_rom(string f)
-{
-	var file = File.new_for_path(f);
-	return new RomData(file, 0x200);
-}
+}	
 
 string get_rom_data(RomData rom)
 {
@@ -48,6 +27,21 @@ string get_rom_data(RomData rom)
 	}
 }
 
+string? get_rom_app(RomData rom)
+{
+	switch(rom.console) {
+		case Console.SNES:
+			return Snes.get_rom_app();
+		case Console.GENESIS:
+			return Genesis.get_rom_app();
+		case Console.GBA:
+			return Gba.get_rom_app();
+		case Console.UNKNOWN:
+		default:
+			return null;
+	}
+}
+
 enum Console {
 	UNKNOWN,
 	SNES,
@@ -56,7 +50,6 @@ enum Console {
 }
 
 class RomData : GLib.Object {
-//namespace Roms {
 	public uint size { get; private set; }
 	public bool header { get; private set; }
 	public uint8[] data { get; private set; }
@@ -126,7 +119,6 @@ class RomData : GLib.Object {
 	{
 		bool ret = true;
 		for(int i = 0; i < b.length; ++i) {
-			//stdout.printf("%d %x %x\n", i, a[i], b[i]);
 			if(a[i] != b[i]) {
 				ret = false;
 				break;
@@ -161,9 +153,15 @@ namespace Gba {
 		string name = get_name(rom.data, header);
 		string gamecode = get_gamecode(rom.data, header);
 
-		stdout.printf("Name: %s\n", name);
-		stdout.printf("Code: %s\n", gamecode);
-		return "";
+		string output = "Game Boy Advance Rom\n";
+		output += @"Name: $name\n";
+		output += @"Code: $gamecode\n";
+		return output;
+	}
+
+	string get_rom_app()
+	{
+		return "mednafen"; //stub
 	}
 
 	string get_name(uint8[] data, uint offset)
@@ -207,17 +205,17 @@ namespace Genesis {
 		string osname = get_name_overseas(rom.data, header);
 		string region = get_region(rom.data, header);
 
-		/*stdout.printf("Header offset: %x\n", header);
-		stdout.printf("Console: %s\n", console);
-		stdout.printf("Name: %s\n", name);
-		stdout.printf("OS Name: %s\n", osname);*/
-		
 		string output = "Sega Genesis/Mega Drive Rom\n";
 		output += @"Console: $console\n";
 		output += @"Domestic name: $name\n";
 		output += @"Overseas name: $osname\n";
 		output += @"Cartridge region: $region\n";
 		return output;
+	}
+	
+	string get_rom_app()
+	{
+		return "gens"; //stub
 	}
 
 	string get_console(uint8[] data, uint offset)
@@ -278,14 +276,16 @@ namespace Snes {
 		uint header = find_header(rom.data, rom.size);// - offset);
 		string name = get_name(rom.data, header);
 			
-		//stdout.printf("SMC Header: %s\n", headered(size).to_string());
-		//stdout.printf("SNES Header offset: %x\n", header);
-		//stdout.printf("Name: %s\n", name);
 		string output = "Super Famicon/Nintendo Rom\n";
 		output += @"Header offset: $header\n";
 		output += @"Game name: $name\n";
 		//output += @"Cartridge region: $region\n";
 		return output;
+	}
+	
+	string get_rom_app()
+	{
+		return "zsnes"; //stub
 	}
 
 	string get_name(uint8[] data, uint header)
