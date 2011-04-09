@@ -1,4 +1,5 @@
 using Curses;
+using Gee;
 
 public class Statusbar : GLib.Object
 {
@@ -72,12 +73,15 @@ public class Menu : GLib.Object
 	private Statusbar status;
 
 	private Window scrlwin;
+	private Window infobox;
+
 	private const unichar BUD = '|';
 	private File directory;
 	
 	public Window win;
 	private int depth = -1;
-	protected FileInfo[] items;
+	//protected FileInfo[] items;
+	private ArrayList<FileInfo?> items;
 	public int selected { get; private set; default = 0; }
 	public int offset { get; private set; default = 0; }
 
@@ -96,11 +100,12 @@ public class Menu : GLib.Object
 		} else {
 			this.win = new Window(y, x, yoff, xoff);
 		}
+		infobox = new Window(y - 6, x - 12, yoff + 3, xoff + 6);
+		infobox.bkgdset(COLOR_PAIR(2) | Attribute.BOLD);
+		
 		status = new Statusbar(1, x, y, 0);
 		status.set_color(COLOR_PAIR(2) | Attribute.BOLD);
 		
-			
-		this.items = {};
 		set_directory(dir);
 
 		status.add_message("Consul Alpha", 0);
@@ -111,14 +116,15 @@ public class Menu : GLib.Object
 	
 	public FileInfo? get_item(int x)
 	{
-		if (x < items.length) 
-			return items[x];
+		if (x < items.size) 
+			return items.get(x);
 		return null;
 	}
 
 	public int length()
 	{
-		return items.length - 1;
+		//return items.length - 1;
+		return items.size - 1;
 	}
 
 	public void scroll_up()
@@ -143,9 +149,25 @@ public class Menu : GLib.Object
 		generate(offset);
 	}
 
+	public void info_window()
+	{
+		infobox.clear();
+		//infobox.addstr("Herpy derpy!");
+		FileInfo f = items.get(offset+selected);
+		var rom = get_rom(directory.get_path() + "/" + f.get_name());
+		infobox.addstr(get_rom_data(rom));
+		infobox.clrtoeol();
+		infobox.noutrefresh();
+		doupdate();
+		//infobox.getch();
+	}
+
 	public string? keypress(int key)
 	{
 		switch(key) {
+			case 'i':
+				info_window();
+				break;
 			case 'p':
 			case Key.UP:
 				scroll_up();
@@ -155,10 +177,12 @@ public class Menu : GLib.Object
 				scroll_down();
 				break;
 			case 'e':
+			case Key.RIGHT:
 			case Key.ENTER:
 				do_selected();
 				generate();
 				break;
+			case Key.LEFT:
 			case 'u':
 				set_directory(directory.get_path() + "/..");
 				generate();
@@ -168,7 +192,12 @@ public class Menu : GLib.Object
 		}
 		return null;
 	}
-	
+
+	private int fileinfo_strcmp(FileInfo a, FileInfo b)
+	{
+		return strcmp(a.get_name(), b.get_name());
+	}
+
 	public void set_directory(string d)
 	{
 		try {
@@ -180,25 +209,32 @@ public class Menu : GLib.Object
 				++depth;
 			status.add_message(@"DEBUG: Depth $depth", 1);
 
-		directory = File.new_for_commandline_arg(d);
-		var enumerator = directory.enumerate_children 
+			directory = File.new_for_commandline_arg(d);
+			var enumerator = directory.enumerate_children 
 				(FILE_ATTRIBUTE_STANDARD_NAME + "," + FILE_ATTRIBUTE_STANDARD_TYPE, 0);
-
-		FileInfo file_info;
-			FileInfo[] files = {};
-			FileInfo[] pitems = {};
-		while ((file_info = enumerator.next_file ()) != null) {
-			if (file_info.get_name()[0] != '.') {
+	
+			FileInfo file_info;
+			//FileInfo[] files = {};
+			//FileInfo[] dirs = {};
+			items = new ArrayList<FileInfo?>();
+			var files = new ArrayList<FileInfo?>();
+			var dirs = new ArrayList<FileInfo?>();
+			files.sort_with_data((CompareDataFunc)fileinfo_strcmp);
+			dirs.sort_with_data((CompareDataFunc)fileinfo_strcmp);
+			//Posix.qsort();	
+			while ((file_info = enumerator.next_file ()) != null) {
+				if (file_info.get_name()[0] != '.') {
 					if (file_info.get_file_type() == FileType.DIRECTORY)
-						pitems += file_info;
+						dirs.add(file_info);
+						//items.add(file_info);
 					else
-						files += file_info;
+						files.add(file_info);
 				}
 			}
-			foreach (FileInfo i in files) {
-				pitems += i;
-			}
-			items = pitems;
+			files.sort();
+			items.add_all(dirs);
+			items.add_all(files);
+			
 			selected = 0;
 			offset = 0;
 
@@ -210,7 +246,7 @@ public class Menu : GLib.Object
 
 	public void do_selected() 
 	{
-		FileInfo f = items[offset+selected];
+		FileInfo f = items.get(offset+selected);
 		if (f.get_file_type() == FileType.DIRECTORY)
 			set_directory(directory.get_path() + "/" + f.get_name());
 		//stub
@@ -218,10 +254,10 @@ public class Menu : GLib.Object
 
 	public string get_item_string(int x)
 	{
-		if (items[x].get_file_type() == FileType.DIRECTORY)
-			return items[x].get_name() + " >";
+		if (items.get(x).get_file_type() == FileType.DIRECTORY)
+			return items.get(x).get_name() + " >";
 		else
-			return items[x].get_name();
+			return items.get(x).get_name();
 	}
 
 	public void generate(int offset=0, int x=0) 
@@ -303,7 +339,7 @@ void error(string msg)
 	refresh();
 	def_prog_mode();
 	endwin();
-
+	
 	stdout.printf("----------------------\n");
 	stdout.printf("| An error occurred: |\n");
 	stdout.printf("----------------------\n");
@@ -313,6 +349,14 @@ void error(string msg)
 	stdout.printf("Press ENTER to continue...\n");
 	stdout.flush();
 	getch();
+
+	/*
+	var win = new Window(10, 10, 2, 2);
+	win.keypad(true);
+	win.addstr(msg);
+	refresh();
+	win.getch();
+	*/
 
 	reset_prog_mode();
 	refresh();
@@ -342,7 +386,7 @@ int main (string[] args)
     	list.win.bkgdset (COLOR_PAIR(1));  // set background
 		list.win.scrollok(true);
 		list.win.keypad(true);
-		list.generate();
+		//list.generate();
 
 	
 		for (;;) {
