@@ -81,7 +81,7 @@ public class Menu : GLib.Object
 	public Window win;
 	private int depth = -1;
 	//protected FileInfo[] items;
-	private ArrayList<FileInfo?> items;
+	private ArrayList<string> items;
 	public int selected { get; private set; default = 0; }
 	public int offset { get; private set; default = 0; }
 
@@ -114,7 +114,7 @@ public class Menu : GLib.Object
 		generate();
 	}
 	
-	public FileInfo? get_item(int x)
+	public string? get_item(int x)
 	{
 		if (x < items.size) 
 			return items.get(x);
@@ -153,8 +153,8 @@ public class Menu : GLib.Object
 	{
 		infobox.clear();
 		//infobox.addstr("Herpy derpy!");
-		FileInfo f = items.get(offset+selected);
-		var rom = get_rom(directory.get_path() + "/" + f.get_name());
+		string f = items.get(offset+selected);
+		var rom = get_rom(directory.get_path() + "/" + f);
 		infobox.addstr(get_rom_data(rom));
 		infobox.clrtoeol();
 		infobox.noutrefresh();
@@ -193,11 +193,6 @@ public class Menu : GLib.Object
 		return null;
 	}
 
-	private int fileinfo_strcmp(FileInfo a, FileInfo b)
-	{
-		return strcmp(a.get_name(), b.get_name());
-	}
-
 	public void set_directory(string d)
 	{
 		try {
@@ -214,23 +209,22 @@ public class Menu : GLib.Object
 				(FILE_ATTRIBUTE_STANDARD_NAME + "," + FILE_ATTRIBUTE_STANDARD_TYPE, 0);
 	
 			FileInfo file_info;
-			//FileInfo[] files = {};
-			//FileInfo[] dirs = {};
-			items = new ArrayList<FileInfo?>();
-			var files = new ArrayList<FileInfo?>();
-			var dirs = new ArrayList<FileInfo?>();
-			files.sort_with_data((CompareDataFunc)fileinfo_strcmp);
-			dirs.sort_with_data((CompareDataFunc)fileinfo_strcmp);
-			//Posix.qsort();	
+
+			items = new ArrayList<string>();
+			var files = new ArrayList<string>();
+			var dirs = new ArrayList<string>();
+			
+			string name;
 			while ((file_info = enumerator.next_file ()) != null) {
-				if (file_info.get_name()[0] != '.') {
+				name = file_info.get_name();
+				if (name[0] != '.') {
 					if (file_info.get_file_type() == FileType.DIRECTORY)
-						dirs.add(file_info);
-						//items.add(file_info);
+						dirs.add(name);
 					else
-						files.add(file_info);
+						files.add(name);
 				}
 			}
+			dirs.sort();
 			files.sort();
 			items.add_all(dirs);
 			items.add_all(files);
@@ -238,26 +232,32 @@ public class Menu : GLib.Object
 			selected = 0;
 			offset = 0;
 
-    	} catch (Error e) {
-		stderr.printf ("Error: %s\n", e.message);
+    	}
+		catch (Error e) {
+			stderr.printf ("Error: %s\n", e.message);
     	}
 	}
 
+	private bool is_directory(string d)
+	{
+		try {
+			var file = File.new_for_path(directory.get_path() + "/" + d);
+			var f = file.query_info("*", FileQueryInfoFlags.NONE);
+			if (f.get_file_type() == FileType.DIRECTORY)
+				return true;
+			return false;
+		}
+		catch(Error e) {
+			return false;
+		}
+	}
 
 	public void do_selected() 
 	{
-		FileInfo f = items.get(offset+selected);
-		if (f.get_file_type() == FileType.DIRECTORY)
-			set_directory(directory.get_path() + "/" + f.get_name());
+		var f = items.get(selected + offset);
+		if(is_directory(f))
+			set_directory(directory.get_path() + "/" + f);
 		//stub
-	}
-
-	public string get_item_string(int x)
-	{
-		if (items.get(x).get_file_type() == FileType.DIRECTORY)
-			return items.get(x).get_name() + " >";
-		else
-			return items.get(x).get_name();
 	}
 
 	public void generate(int offset=0, int x=0) 
@@ -276,7 +276,9 @@ public class Menu : GLib.Object
 			if (c == selected)
 				win.attron(Attribute.REVERSE);
 			if (c + offset <= length()) {
-				string item = get_item_string(c + offset);
+				string item = items.get(c + offset);
+				if(is_directory(item))
+					item += " >";
 				if (item != null)
 					win.mvaddstr(c, x, item);
 			}

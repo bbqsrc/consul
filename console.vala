@@ -250,18 +250,7 @@ namespace Genesis {
 		string output = ((string)buff)[0:0x03];
 		return output;
 	}
-
-	bool? headered(int64 size)
-	{
-		int64 res = size % 1024;
-		if(res == 0)
-			return false;
-		else if(res == 512)
-			return true;
-		return null;
-	}
-}
-		
+}	
 
 namespace Snes {
 	enum HeaderField {
@@ -297,16 +286,6 @@ namespace Snes {
 		output += @"Game name: $name\n";
 		//output += @"Cartridge region: $region\n";
 		return output;
-	}
-	
-	bool? headered(int64 size)
-	{
-		int64 res = size % 1024;
-		if(res == 0)
-			return false;
-		else if(res == 512)
-			return true;
-		return null;
 	}
 
 	string get_name(uint8[] data, uint header)
