@@ -93,14 +93,32 @@ public class Menu : GLib.Object
 	{
 		this.config = new KeyFile();
 		get_config();
+	
+		int infx = x;
+		int infy = y;
+		int infxoff = xoff;
+		int infyoff = yoff;
 		
+		if(y < 14 || x < 38) {
+			infx -= 2;
+			infy -= 2;
+			infxoff = 1;
+			infyoff = 1;
+		}
+		else {
+			infx -= 6;
+			infy -= 8;
+			infxoff += 3;
+			infyoff += 4;
+		}
 		if (scrl) {
 			this.win = new Window(y, x-1, yoff, xoff);
 			this.scrlwin = new Window(y, 1, yoff, x-1);
+			this.infobox = new Window(infy, infx - 1, infyoff, infxoff);
 		} else {
 			this.win = new Window(y, x, yoff, xoff);
+			this.infobox = new Window(infy, infx, infyoff, infxoff);
 		}
-		infobox = new Window(y - 6, x - 12, yoff + 3, xoff + 6);
 		infobox.bkgdset(COLOR_PAIR(2) | Attribute.BOLD);
 		
 		status = new Statusbar(1, x, y, 0);
@@ -151,16 +169,17 @@ public class Menu : GLib.Object
 
 	public void info_window(string? msg=null)
 	{
-		//generate();
-		string f = items.get(offset+selected);
-		var rom = get_rom(directory.get_path() + "/" + f);
-		if(rom == null)
-			return;
 		infobox.clear();
-		if(msg == null)
-			infobox.addstr(get_rom_data(rom));
-		else
+		if(msg != null) {
 			infobox.addstr(msg);
+		}
+		else {
+			string f = items.get(offset+selected);
+			var rom = get_rom(directory.get_path() + "/" + f);
+			if(rom == null)
+				return;
+			infobox.addstr(get_rom_data(rom));
+		}
 		infobox.clrtoeol();
 		infobox.noutrefresh();
 		doupdate();
